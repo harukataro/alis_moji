@@ -1,12 +1,10 @@
-import requests
-import json
 import glob
 import re
-import  alis_util as alis
+import alis_util as alis
 import idpw
 import os
 import shutil
-import cv2
+import sys
 from datetime import datetime
 from janome.tokenizer import Tokenizer
 from collections import defaultdict
@@ -21,11 +19,13 @@ IMAGE_ARTICLE = '3bNnmrBWAAQJ'
 ACCESS_TOKEN = alis.get_access_token(idpw.ID, idpw.PW)
 title_txt = "赤組も白組も2019年を振り返りましょう♪"
 
+
 def test_delete_file():
     target_dir = './images'
     if os.path.isdir(target_dir):
         shutil.rmtree(target_dir)
     os.mkdir(target_dir)
+
 
 def check_request(article_id):
     done_users = list(map(lambda image: image[9:-4], glob.glob("./images/*.png")))
@@ -37,25 +37,6 @@ def get_client_article_ids(clients):
     for client in clients:
         client_article_ids[client] = alis.get_article_list_period(client, START_TIME, END_TIME)
     return client_article_ids
-
-
-# def addIcon(client):
-#     icon_file = f'./icon/{client}.png'
-#     wc_file = f'./images/{client}.png'
-#
-#     if not os.path.isfile(icon_file):
-#         url = f'https://alis.to/api/users/{client}/info'
-#         icon_url = json.loads(requests.get(url).text)["icon_image_url"]
-#         alis.download_file(icon_url, icon_file)
-#
-#     img1 = cv2.imread(wc_file)
-#     img2 = cv2.imread(icon_file)
-#
-#     height, width = img1.shape[:2]
-#     img2[0:height, 0:width] = img1
-#
-#     cv2.imwrite('new.jpg', img2)
-
 
 
 def make_wordcloud(client_article_ids):
@@ -72,10 +53,14 @@ def make_statics(client_article_ids):
     client_statics = {}
 
     for client, article_ids in client_article_ids.items():
-        print('statics:', client)
+        print(f'  statics:{client}')
+        print(f'    like')
         like_num = alis.get_like_total(article_ids)
+        print(f'    tip')
         tip_num, tip_top_user = alis.get_tip_statics(article_ids)
+        print(f'    comment')
         comment_num, comment_top_user = alis.get_comment_statics(article_ids)
+        print(f'    image')
         image_url = alis.upload_image(ACCESS_TOKEN, IMAGE_ARTICLE, f'./images/{client}.png')
 
         client_statics[client] = {
@@ -114,12 +99,6 @@ def wordcount(texts, user_id):
     return 0
 
 
-def get_curret_article(article_id):
-    url = f'https://alis.to/api/articles/{article_id}'
-    data = json.loads(requests.get(url).text)
-    return data['body']
-
-
 def make_alis_article(statics):
     new_strings = ''
 
@@ -132,27 +111,28 @@ def make_alis_article(statics):
         new_strings += f'トップチッパー: {alis.get_user_name(v["tip_top_user"])}<br>\n'
         new_strings += f'トップコメンター: {alis.get_user_name(v["comment_top_user"])}<br>\n'
         new_strings += '<br><br><br>'
-    return get_curret_article(BASE_ARTICLE) + new_strings
+    return alis.get_article_body(BASE_ARTICLE) + new_strings
 
 
 if __name__ == '__main__':
 
-    # print('test')
-    # test_delete_file()
-
     print('check request')
     clients = check_request(REQ_ARTICLE)
-    print(clients)
+
+    if len(clients) == 0:
+        print('no request. exit code')
+        sys.exit()
 
     print('get infromations')
     client_article_ids = get_client_article_ids(clients)
-    print('make word cloud')
+    print('  make word cloud')
     make_wordcloud(client_article_ids)
+    print('  make statics')
     statics = make_statics(client_article_ids)
 
-    print('generate article and post')
+    print('post process')
+    print('  make final article')
     contents = make_alis_article(statics)
-
-    #contents = '<img src= "https://alis.to/d/api/articles_images/haruka/39rQgyyQvqy7/b50eb999-1d1c-432b-9630-7f8284c87aba.png"> <br><br>          2019年もありがとうございました。今年もALISでみなさんと触れ合えて楽しかったです。こちらの記事にコメントや投げ銭をしていただくと、あなたのALISライフの総括ができます。1日の数回アップデートしますのでまた遊びにきてくださいね。'
-
-    alis.update_article(ACCESS_TOKEN, title_txt, contents, BASE_ARTICLE)
+    print('  generate article and post')
+    alis.update_article(ACCESS_TOKEN, contents, BASE_ARTICLE)
+    print('finished')

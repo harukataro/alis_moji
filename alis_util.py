@@ -5,8 +5,34 @@ from datetime import datetime, timedelta, timezone
 import base64
 import urllib.request
 
+
 JST = timezone(timedelta(hours=+9), 'JST')
 DELTA_JST = 9 * 60 * 60 * 60
+
+POOL_ID = 'ap-northeast-1_HNT0fUj4J'
+POOL_REGION = 'ap-northeast-1'
+CLIENT_ID = '2gri5iuukve302i4ghclh6p5rg'
+
+
+def get_article_body(article_id):
+    url = f'https://alis.to/api/articles/{article_id}'
+    data = json.loads(requests.get(url).text)
+    return data['body']
+
+
+def get_article_title(article_id):
+    url = f'https://alis.to/api/articles/{article_id}'
+    data = json.loads(requests.get(url).text)
+    return data['title']
+
+
+def get_article_eye_catch_url(article_id):
+    url = f'https://alis.to/api/articles/{article_id}'
+    data = json.loads(requests.get(url).text)
+
+    if 'eye_catch_url' not in data:
+        return ''
+    return data['eye_catch_url']
 
 
 def download_file(url, dst_path):
@@ -26,10 +52,8 @@ def get_user_name(user_id):
     else:
         return 'none'
 
+
 def get_access_token(username, password):
-    POOL_ID = 'ap-northeast-1_HNT0fUj4J'
-    POOL_REGION = 'ap-northeast-1'
-    CLIENT_ID = '2gri5iuukve302i4ghclh6p5rg'
     aws = AWSSRP(username=username, password=password, pool_id=POOL_ID, client_id=CLIENT_ID, pool_region=POOL_REGION)
     return aws.authenticate_user()['AuthenticationResult']['IdToken']
 
@@ -98,7 +122,6 @@ def get_article_list_period(user_id, starttime, endtime):
                 break
             article_id = article['article_id']
             sort_key = article['sort_key']
-
 
             article_list.append(article_id)
             num_of_data += 1
@@ -170,17 +193,31 @@ def get_comment_statics(article_ids):
     return num, top_user
 
 
-def update_article(accesstoken, title_txt, body, article_id):
+def update_article(accesstoken, body, article_id):
+
+    url = f'https://alis.to/api/me/articles/{article_id}/public/edit'
+    method = 'GET'
+    headers = {'Authorization': accesstoken}
+    request = urllib.request.Request(url, method=method, headers=headers)
+    with urllib.request.urlopen(request) as res:
+        resjson = json.loads(res.read().decode('utf-8'))
+        title = resjson['title']
+        topic = resjson['topic']
+        tags = resjson['tags']
+        eye_catch_url = resjson['eye_catch_url']
+        if eye_catch_url == None:
+            eye_catch_url = ''
+
     url = f'https://alis.to/api/me/articles/{article_id}/public/title'
     method = 'PUT'
     headers = {'Authorization': accesstoken}
     data = {
-        'title': title_txt,
+        'title': title,
     }
     request = urllib.request.Request(url, json.dumps(data).encode(), method=method, headers=headers)
     with urllib.request.urlopen(request) as response:
-        print(response.code)
-
+        if response.code != 200:
+            print('PUT ERROR')
 
     url = f'https://alis.to/api/me/articles/{article_id}/public/body'
     method = 'PUT'
@@ -190,22 +227,27 @@ def update_article(accesstoken, title_txt, body, article_id):
     }
     request = urllib.request.Request(url, json.dumps(data).encode(), method=method, headers=headers)
     with urllib.request.urlopen(request) as response:
-        print(response.code)
+        if response.code != 200:
+            print('PUT ERROR')
 
     #republish
     url = f'https://alis.to/api/me/articles/{article_id}/public/republish_with_header'
     method = 'PUT'
     headers = {'Authorization': accesstoken}
     data = {
-        'topic': "technology",
-        'tags': ["白組"],
-        'eye_catch_url': "https://alis.to/d/api/articles_images/haruka/39rQgyyQvqy7/b50eb999-1d1c-432b-9630-7f8284c87aba.png"
+        # 'topic': "technology",
+        # 'tags': ["白組", "プログラミング"],
+        # 'eye_catch_url': "https://alis.to/d/api/articles_images/haruka/39rQgyyQvqy7/b50eb999-1d1c-432b-9630-7f8284c87aba.png"
+
+        'topic': topic,
+        'tags': tags,
+        'eye_catch_url': eye_catch_url,
     }
     request = urllib.request.Request(url, json.dumps(data).encode(), method=method, headers=headers)
     with urllib.request.urlopen(request) as response:
-        print(response.code)
+        if response.code != 200:
+            print('PUT ERROR')
     return 0
-
 
 
 def upload_image(accesstoken, article_id, image_file):
